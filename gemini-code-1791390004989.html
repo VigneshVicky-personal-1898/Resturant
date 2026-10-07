@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ÉCLAT & EMBER — Autonomous 3D Realistic Restaurant Simulator</title>
+  
+  <!-- Modern Libraries: Three.js, OrbitControls, Tailwind CSS, FontAwesome, Google Fonts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cinzel:wght@600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #050608;
+      color: #f3f4f6;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .font-luxury { font-family: 'Cinzel', serif; }
+    .font-mono-code { font-family: 'JetBrains Mono', monospace; }
+
+    #webgl-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    /* Glassmorphism Ultra Surface */
+    .glass-panel {
+      background: rgba(11, 13, 19, 0.78);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+    }
+    .glass-panel-gold {
+      background: rgba(18, 16, 12, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(212, 175, 55, 0.25);
+    }
+
+    /* Status indicator glows */
+    .status-pulse {
+      box-shadow: 0 0 14px currentColor;
+    }
+
+    /* Custom Modern Scrollbars */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(212, 175, 55, 0.5); }
+  </style>
+</head>
+<body class="w-screen h-screen">
+
+  <!-- 3D WEBGL SURFACE -->
+  <div id="webgl-canvas"></div>
+
+  <!-- TOP CINEMATIC HUD & CAMERA DIRECTOR -->
+  <header class="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+    
+    <!-- Branding & Engine Telemetry -->
+    <div class="glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-3 pointer-events-auto">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-300 flex items-center justify-center text-black font-bold shadow-lg shadow-amber-500/20">
+        <i class="fa-solid fa-utensils text-sm"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-luxury text-sm font-bold text-amber-300 tracking-wider">ÉCLAT & EMBER</h1>
+          <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono-code border border-emerald-500/30">v3.5 LIVE</span>
+        </div>
+        <p class="text-[10px] text-neutral-400 font-mono-code flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+          REAL-TIME 3D SIMULATION ENGINE
+        </p>
+      </div>
+    </div>
+
+    <!-- Center Operations KPI Metric Pills -->
+    <div class="hidden xl:flex items-center gap-2 font-mono-code text-xs pointer-events-auto">
+      <div class="glass-panel px-3 py-1.5 rounded-xl flex items-center gap-2">
+        <span class="text-neutral-400">Tables:</span>
+        <span id="kpi-tables" class="font-bold text-amber-400">0/8 Occ</span>
+      </div>
+      <div class="glass-panel px-3 py-1.5 rounded-xl flex items-center gap-2">
+        <span class="text-neutral-400">Orders:</span>
+        <span id="kpi-orders" class="font-bold text-sky-400">0 Active</span>
+      </div>
+      <div class="glass-panel px-3 py-1.5 rounded-xl flex items-center gap-2">
+        <span class="text-neutral-400">Kitchen:</span>
+        <span id="kpi-kitchen" class="font-bold text-rose-400">0 Queued</span>
+      </div>
+      <div class="glass-panel px-3 py-1.5 rounded-xl flex items-center gap-2">
+        <span class="text-neutral-400">Staff:</span>
+        <span id="kpi-staff" class="font-bold text-indigo-300">4 Active</span>
+      </div>
+      <div class="glass-panel-gold px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-amber-300">
+        <i class="fa-solid fa-coins"></i>
+        <span>Revenue:</span>
+        <span id="kpi-revenue" class="font-bold text-white">₹0</span>
+      </div>
+    </div>
+
+    <!-- Camera Navigation & Controls -->
+    <div class="glass-panel p-1.5 rounded-2xl flex items-center gap-1.5 pointer-events-auto">
+      <!-- Camera Presets -->
+      <div class="flex items-center bg-black/40 rounded-xl p-1 gap-1">
+        <button onclick="setCameraView('overview')" id="cam-overview" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-400 text-black transition">Overview</button>
+        <button onclick="setCameraView('dining')" id="cam-dining" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-neutral-400 hover:text-white transition">Dining</button>
+        <button onclick="setCameraView('kitchen')" id="cam-kitchen" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-neutral-400 hover:text-white transition">Kitchen</button>
+        <button onclick="setCameraView('entrance')" id="cam-entrance" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-neutral-400 hover:text-white transition">Foyer</button>
+      </div>
+
+      <!-- Follow Target Selector Dropdown -->
+      <select id="follow-select" onchange="onFollowSelectChange(this.value)" class="bg-black/50 border border-white/10 text-neutral-300 text-xs rounded-xl px-2 py-1.5 outline-none focus:border-amber-400">
+        <option value="none">Free Camera</option>
+        <option value="waiter-1">Follow Waiter (Vikram)</option>
+        <option value="waiter-2">Follow Waitress (Priya)</option>
+        <option value="chef-1">Follow Chef (Marcus)</option>
+        <option value="customer-active">Follow Active Guest</option>
+      </select>
+
+      <!-- Audio Ambient Toggle -->
+      <button onclick="toggleAudioEngine()" id="audio-btn" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 flex items-center justify-center transition" title="Toggle Restaurant Atmosphere Audio">
+        <i class="fa-solid fa-volume-xmark text-xs" id="audio-icon"></i>
+      </button>
+
+      <!-- Manual Walk-in Spawner -->
+      <button onclick="spawnCustomerParty()" class="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-semibold text-xs transition flex items-center gap-1.5 shadow-lg shadow-amber-400/20 active:scale-95">
+        <i class="fa-solid fa-user-plus text-xs"></i> <span>Seat Walk-in</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- COLLAPSIBLE KITCHEN DISPLAY SYSTEM (KDS) & OPERATIONS DOCK (LEFT SIDEBAR) -->
+  <aside id="kds-drawer" class="absolute top-20 left-4 bottom-6 w-80 glass-panel rounded-3xl z-20 flex flex-col pointer-events-auto transition-transform duration-300 ease-in-out">
+    <!-- Header -->
+    <div class="p-4 border-b border-white/10 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i class="fa-solid fa-kitchen-set text-amber-400 text-sm"></i>
+        <h2 class="text-xs font-bold uppercase tracking-wider text-neutral-200">Kitchen Display System</h2>
+      </div>
+      <span id="kds-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono-code bg-amber-500/20 text-amber-300 border border-amber-500/30">0 Orders</span>
+    </div>
+
+    <!-- Active Orders Scroll Container -->
+    <div id="kds-order-list" class="flex-1 overflow-y-auto p-3 space-y-2.5">
+      <div class="text-[11px] text-neutral-500 text-center py-10 italic">
+        No pending culinary orders. Kitchen stations ready...
+      </div>
+    </div>
+
+    <!-- Kitchen Station Utilization HUD -->
+    <div class="p-3.5 bg-black/40 border-t border-white/10 rounded-b-3xl space-y-2 text-[11px] font-mono-code">
+      <div class="flex justify-between text-neutral-400 text-[10px] uppercase">
+        <span>Station Workload</span>
+        <span>Temp / Status</span>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-neutral-300">🔥 Sauté & Grill:</span>
+        <span id="stat-grill" class="text-emerald-400 font-bold">280°C • Active</span>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-neutral-300">🔪 Garde Manger / Prep:</span>
+        <span id="stat-prep" class="text-sky-400 font-bold">Plating Station</span>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-neutral-300">🛎️ Pass Counter:</span>
+        <span id="stat-pass" class="text-amber-400 font-bold">Clear</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- TABLE LIVE INSPECTOR & BILLING INVOICE (RIGHT DOCK) -->
+  <aside id="inspector-drawer" class="absolute top-20 right-4 w-88 glass-panel rounded-3xl z-20 flex flex-col pointer-events-auto p-4 max-h-[85vh] overflow-y-auto shadow-2xl">
+    <div class="flex items-center justify-between pb-3 border-b border-white/10">
+      <div class="flex items-center gap-2">
+        <i class="fa-solid fa-magnifying-glass text-sky-400 text-xs"></i>
+        <h3 class="text-xs font-bold uppercase tracking-wider text-neutral-200">Table Live Inspector</h3>
+      </div>
+      <span id="inspect-status-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase font-mono-code bg-white/5 text-neutral-400 border border-white/10">
+        Table Alpha
+      </span>
+    </div>
+
+    <!-- Dynamic Content -->
+    <div id="inspector-body" class="mt-3.5 space-y-3">
+      <!-- Injected dynamically on click -->
+    </div>
+  </aside>
+
+  <!-- BOTTOM ACTIVITY STREAM & MOBILE OVERLAYS -->
+  <footer class="absolute bottom-4 left-90 right-96 z-20 hidden md:flex items-center justify-between pointer-events-none">
+    <div class="glass-panel px-4 py-2 rounded-2xl flex items-center gap-3 font-mono-code text-xs text-neutral-400 pointer-events-auto">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <span id="latest-event-feed">Éclat & Ember Restaurant Simulation initialized. Ready for service.</span>
+    </div>
+    
+    <div class="glass-panel px-3.5 py-2 rounded-2xl font-mono-code text-[11px] text-neutral-400 flex items-center gap-2 pointer-events-auto">
+      <i class="fa-solid fa-hand-pointer text-amber-400"></i>
+      <span>Click any table, waiter, or chef to inspect & track</span>
+    </div>
+  </footer>
+
+  <!-- MOBILE BOTTOM SHEET TRIGGER -->
+  <div class="xl:hidden absolute bottom-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-auto glass-panel p-2 rounded-2xl">
+    <button onclick="toggleMobileKDS()" class="px-3 py-1.5 rounded-xl bg-white/5 text-xs text-neutral-200 font-semibold flex items-center gap-1.5">
+      <i class="fa-solid fa-fire text-amber-400"></i> KDS Deck
+    </button>
+    <button onclick="spawnCustomerParty()" class="px-3 py-1.5 rounded-xl bg-amber-400 text-black text-xs font-semibold flex items-center gap-1.5">
+      <i class="fa-solid fa-user-plus"></i> Walk-in
+    </button>
+  </div>
+
+  <!-- SCRIPT ENGINE -->
+  <script>
+    /* =========================================================================
+       1. CULINARY DATABASE & GASTRONOMY CATALOG
+    ========================================================================= */
+    const GASTRONOMY_MENU = [
+      { id: "M1", name: "Miyazaki A5 Wagyu Tenderloin", category: "Plat Principal", price: 3800, prepSeconds: 5 },
+      { id: "M2", name: "Glacier 51 Toothfish Confit", category: "Plat Principal", price: 2900, prepSeconds: 4 },
+      { id: "M3", name: "Torched Duck Foie Gras Tart", category: "Entrée", price: 1950, prepSeconds: 3 },
+      { id: "M4", name: "Périgord Black Truffle Risotto", category: "Plat Principal", price: 2100, prepSeconds: 4 },
+      { id: "M5", name: "Valrhona Guanaja 70% Sphere", category: "Dessert", price: 1100, prepSeconds: 3 },
+      { id: "M6", name: "Grand Cru Sommelier Wine Flight", category: "Beverage", price: 1850, prepSeconds: 2 }
+    ];
+
+    /* =========================================================================
+       2. THREE.JS SCENE, ARCHITECTURAL LAYOUT & PHYSICAL RESTAURANT
+    ========================================================================= */
+    const canvasContainer = document.getElementById('webgl-canvas');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x07080b);
+    scene.fog = new THREE.FogExp2(0x07080b, 0.018);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.2, 200);
+    camera.position.set(0, 20, 26);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    canvasContainer.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2.05; // Prevent camera dipping below floor
+    controls.minDistance = 4;
+    controls.maxDistance = 60;
+    controls.target.set(0, 1.2, 0);
+
+    // Dynamic Atmospheric Lighting
+    const ambientLight = new THREE.AmbientLight(0xffecd6, 0.65);
+    scene.add(ambientLight);
+
+    const chandelierLight = new THREE.PointLight(0xffb766, 1.9, 32);
+    chandelierLight.position.set(2, 9, 2);
+    chandelierLight.castShadow = true;
+    chandelierLight.shadow.mapSize.width = 2048;
+    chandelierLight.shadow.mapSize.height = 2048;
+    chandelierLight.shadow.bias = -0.001;
+    scene.add(chandelierLight);
+
+    // Warm Kitchen Spotlight
+    const kitchenSpotlight = new THREE.SpotLight(0xffaa44, 2.8, 22, Math.PI / 3, 0.4, 1);
+    kitchenSpotlight.position.set(-11, 8, -6);
+    kitchenSpotlight.target.position.set(-11, 0, -6);
+    kitchenSpotlight.castShadow = true;
+    scene.add(kitchenSpotlight);
+    scene.add(kitchenSpotlight.target);
+
+    // Host Foyer Chandelier
+    const foyerLight = new THREE.PointLight(0x88ccff, 1.2, 16);
+    foyerLight.position.set(0, 6, 14);
+    scene.add(foyerLight);
+
+    // Architectural Flooring (Polished herringbone luxury dark parquet)
+    const floorGeo = new THREE.PlaneGeometry(42, 38);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x12141a,
+      roughness: 0.28,
+      metalness: 0.22,
+    });
+    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.receiveShadow = true;
+    scene.add(floorMesh);
+
+    // Wall Builder Utility
+    function buildWall(w, h, d, x, y, z, color = 0x181a22, metal = 0.1, rough = 0.8) {
+      const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color, metalness: metal, roughness: rough })
+      );
+      wall.position.set(x, y, z);
+      wall.receiveShadow = true;
+      wall.castShadow = true;
+      scene.add(wall);
+      return wall;
+    }
+
+    // Outer Boundary Architecture
+    buildWall(42, 6, 0.6, 0, 3, -18);      // North Back Wall
+    buildWall(0.6, 6, 38, -21, 3, 0);     // West Wall
+    buildWall(0.6, 6, 38, 21, 3, 0);      // East Wall
+    buildWall(18, 6, 0.6, -11.5, 3, 18);  // South Entrance Wall (Left)
+    buildWall(18, 6, 0.6, 11.5, 3, 18);   // South Entrance Wall (Right)
+
+    // Entrance Foyer Portal & Host Desk
+    const hostDesk = new THREE.Mesh(
+      new THREE.BoxGeometry(3.6, 1.2, 1.4),
+      new THREE.MeshStandardMaterial({ color: 0x221f1b, roughness: 0.3, metalness: 0.6 })
+    );
+    hostDesk.position.set(0, 0.6, 13.5);
+    hostDesk.castShadow = true;
+    hostDesk.receiveShadow = true;
+    scene.add(hostDesk);
+
+    // Gold Brass Inlay on Host Desk
+    const hostInlay = new THREE.Mesh(
+      new THREE.BoxGeometry(3.64, 0.08, 1.44),
+      new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.1 })
+    );
+    hostInlay.position.set(0, 1.18, 13.5);
+    scene.add(hostInlay);
+
+    /* =========================================================================
+       3. OPEN COMMERCIAL KITCHEN (STATIONS, HOODS, PASS COUNTER & KDS)
+    ========================================================================= */
+    const kitchenZone = new THREE.Group();
+    kitchenZone.position.set(-11, 0, -8);
+
+    // Kitchen Floor Tile (Stainless / Hygienic Ceramic)
+    const kFloor = new THREE.Mesh(
+      new THREE.PlaneGeometry(16, 14),
+      new THREE.MeshStandardMaterial({ color: 0x272c36, roughness: 0.35 })
+    );
+    kFloor.rotation.x = -Math.PI / 2;
+    kFloor.position.set(0, 0.02, 0);
+    kitchenZone.add(kFloor);
+
+    // Open Kitchen Pass Counter (Where Servers Pick Up Orders)
+    const passCounter = new THREE.Mesh(
+      new THREE.BoxGeometry(11, 1.15, 1.5),
+      new THREE.MeshStandardMaterial({ color: 0x2e3340, metalness: 0.85, roughness: 0.2 })
+    );
+    passCounter.position.set(0, 0.575, 4.8);
+    passCounter.castShadow = true;
+    passCounter.receiveShadow = true;
+    kitchenZone.add(passCounter);
+
+    // Heated Pass Shelf with Warming Lamps
+    const passShelf = new THREE.Mesh(
+      new THREE.BoxGeometry(10.5, 0.08, 0.7),
+      new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.1 })
+    );
+    passShelf.position.set(0, 1.5, 4.8);
+    kitchenZone.add(passShelf);
+
+    const heatLampA = new THREE.PointLight(0xff6622, 1.8, 3.5);
+    heatLampA.position.set(-2.5, 1.4, 4.8);
+    kitchenZone.add(heatLampA);
+
+    const heatLampB = new THREE.PointLight(0xff6622, 1.8, 3.5);
+    heatLampB.position.set(2.5, 1.4, 4.8);
+    kitchenZone.add(heatLampB);
+
+    // Hot Line Range (Stoves, Grills, Ovens)
+    const stoveBlock = new THREE.Mesh(
+      new THREE.BoxGeometry(8, 1.1, 1.8),
+      new THREE.MeshStandardMaterial({ color: 0x16181d, metalness: 0.9, roughness: 0.15 })
+    );
+    stoveBlock.position.set(0, 0.55, -4.5);
+    stoveBlock.castShadow = true;
+    kitchenZone.add(stoveBlock);
+
+    // Industrial Stainless Exhaust Hood
+    const exhaustHood = new THREE.Mesh(
+      new THREE.BoxGeometry(9, 1.2, 2.4),
+      new THREE.MeshStandardMaterial({ color: 0x8a92a3, metalness: 0.9, roughness: 0.25 })
+    );
+    exhaustHood.position.set(0, 4.2, -4.5);
+    kitchenZone.add(exhaustHood);
+
+    // Cold Walk-In Refrigerator Bank
+    const fridgeBank = new THREE.Mesh(
+      new THREE.BoxGeometry(2.4, 3.8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x3d4352, metalness: 0.7, roughness: 0.3 })
+    );
+    fridgeBank.position.set(-6.5, 1.9, 0);
+    kitchenZone.add(fridgeBank);
+
+    scene.add(kitchenZone);
+
+    /* =========================================================================
+       4. BAR & SOMMELIER WINE VAULT (EAST WING)
+    ========================================================================= */
+    const barZone = new THREE.Group();
+    barZone.position.set(13, 0, -6);
+
+    // Curved Bar Counter
+    const barCounter = new THREE.Mesh(
+      new THREE.BoxGeometry(2.2, 1.18, 11),
+      new THREE.MeshStandardMaterial({ color: 0x1f1917, roughness: 0.25, metalness: 0.4 })
+    );
+    barCounter.position.set(0, 0.59, 0);
+    barCounter.castShadow = true;
+    barZone.add(barCounter);
+
+    // Backlit Wine Display Wall
+    const wineWall = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 4.5, 11),
+      new THREE.MeshStandardMaterial({ color: 0x0f1117, roughness: 0.5 })
+    );
+    wineWall.position.set(3.5, 2.25, 0);
+    barZone.add(wineWall);
+
+    const wineBacklight = new THREE.PointLight(0xffb74d, 1.8, 8);
+    wineBacklight.position.set(3, 2.5, 0);
+    barZone.add(wineBacklight);
+
+    scene.add(barZone);
+
+    /* =========================================================================
+       5. DINING ROOM: 8 UNIQUE TABLES (2, 4, 6 SEATERS & PRIVATE VIP)
+    ========================================================================= */
+    const TABLES_BLUEPRINT = [
+      { id: 1, name: "Table 1 (Intimate 2P)", x: -4.5, z: 2.5, seats: 2, radius: 1.1, tier: "STANDARD" },
+      { id: 2, name: "Table 2 (Executive 4P)", x: 2.0, z: 2.5, seats: 4, radius: 1.5, tier: "STANDARD" },
+      { id: 3, name: "Table 3 (Intimate 2P)", x: 8.5, z: 2.5, seats: 2, radius: 1.1, tier: "STANDARD" },
+      { id: 4, name: "Table 4 (Executive 4P)", x: -4.5, z: 8.5, seats: 4, radius: 1.5, tier: "STANDARD" },
+      { id: 5, name: "Table 5 (Sanctuary 6P)", x: 2.0, z: 8.5, seats: 6, radius: 1.8, tier: "ROYAL" },
+      { id: 6, name: "Table 6 (Executive 4P)", x: 8.5, z: 8.5, seats: 4, radius: 1.5, tier: "STANDARD" },
+      { id: 7, name: "Table 7 (Grand VIP)", x: 7.5, z: -11.5, seats: 6, radius: 2.0, tier: "VIP" },
+      { id: 8, name: "Table 8 (Private Vault)", x: -2.0, z: -11.5, seats: 4, radius: 1.6, tier: "VIP" },
+    ];
+
+    const tables = [];
+
+    TABLES_BLUEPRINT.forEach(item => {
+      const group = new THREE.Group();
+      group.position.set(item.x, 0, item.z);
+
+      // Calacatta White Marble Top with Gold Edge
+      const top = new THREE.Mesh(
+        new THREE.CylinderGeometry(item.radius, item.radius, 0.08, 36),
+        new THREE.MeshStandardMaterial({
+          color: item.tier === "VIP" ? 0x161820 : 0xf4f1ea,
+          roughness: 0.18,
+          metalness: item.tier === "VIP" ? 0.6 : 0.15
+        })
+      );
+      top.position.y = 1.05;
+      top.castShadow = true;
+      top.receiveShadow = true;
+      group.add(top);
+
+      // Cast Brass Pedestal Leg
+      const leg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.45, 1.05, 16),
+        new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.15 })
+      );
+      leg.position.y = 0.525;
+      leg.castShadow = true;
+      group.add(leg);
+
+      // Table Centerpiece (Candle lantern)
+      const lantern = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.1, 0.28, 12),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffaa44, emissiveIntensity: 1.2 })
+      );
+      lantern.position.y = 1.22;
+      group.add(lantern);
+
+      const tableCandleLight = new THREE.PointLight(0xff9933, 0.75, 4.2);
+      tableCandleLight.position.y = 1.35;
+      group.add(tableCandleLight);
+
+      // Radial Dining Chairs with Luxury Velvet Upholstery
+      const chairInstances = [];
+      for (let s = 0; s < item.seats; s++) {
+        const angle = (s / item.seats) * Math.PI * 2;
+        const chairDist = item.radius + 0.48;
+        const cx = Math.sin(angle) * chairDist;
+        const cz = Math.cos(angle) * chairDist;
+
+        const chair = new THREE.Group();
+        chair.position.set(cx, 0, cz);
+        chair.rotation.y = angle + Math.PI; // Face table center
+
+        // Seat Cushion
+        const cushion = new THREE.Mesh(
+          new THREE.BoxGeometry(0.68, 0.1, 0.65),
+          new THREE.MeshStandardMaterial({
+            color: item.tier === "VIP" ? 0x5a1e24 : 0x242833,
+            roughness: 0.7
+          })
+        );
+        cushion.position.y = 0.56;
+        cushion.castShadow = true;
+        chair.add(cushion);
+
+        // Curved Backrest
+        const back = new THREE.Mesh(
+          new THREE.BoxGeometry(0.66, 0.65, 0.09),
+          new THREE.MeshStandardMaterial({
+            color: item.tier === "VIP" ? 0x5a1e24 : 0x242833,
+            roughness: 0.7
+          })
+        );
+        back.position.set(0, 0.92, -0.28);
+        back.castShadow = true;
+        chair.add(back);
+
+        group.add(chair);
+        chairInstances.push({
+          pos: new THREE.Vector3(item.x + cx, 0, item.z + cz),
+          facingAngle: angle + Math.PI,
+          occupied: false
+        });
+      }
+
+      scene.add(group);
+
+      tables.push({
+        id: item.id,
+        name: item.name,
+        seats: item.seats,
+        tier: item.tier,
+        x: item.x,
+        z: item.z,
+        radius: item.radius,
+        group,
+        chairs: chairInstances,
+        serveSpot: new THREE.Vector3(item.x + Math.sin(0.5) * (item.radius + 0.9), 0, item.z + Math.cos(0.5) * (item.radius + 0.9)),
+        state: "AVAILABLE", // AVAILABLE, RESERVED, ARRIVING, SEATED, ORDERING, ORDER_SENT, PREPARING, FOOD_READY, SERVING, DINING, BILL_REQUESTED, PAYMENT, CLEANING
+        guestParty: [],
+        currentOrder: null,
+        billRecord: null,
+        assignedServer: null,
+        platesOnTable: []
+      });
+    });
+
+    /* =========================================================================
+       6. ARTICULATED 3D HUMAN SKELETON WITH INVERSE KINEMATICS GAIT
+    ========================================================================= */
+    function createHumanModel({ role = "CUSTOMER", uniformTone = 0x1d212b, skinTone = 0xd8a576 }) {
+      const root = new THREE.Group();
+
+      const skinMat = new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.55 });
+      const clothMat = new THREE.MeshStandardMaterial({ color: uniformTone, roughness: 0.5 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: role === "CHEF" ? 0x1c1e24 : 0x111317, roughness: 0.6 });
+
+      // Pelvis / Core Center of Mass
+      const pelvis = new THREE.Group();
+      pelvis.position.y = 0.94;
+      root.add(pelvis);
+
+      // Torso & Tailored Suit / Chef Uniform
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.65, 0.28), clothMat);
+      torso.position.y = 0.38;
+      torso.castShadow = true;
+      pelvis.add(torso);
+
+      // Collar Tie (Waiters)
+      if (role === "WAITER") {
+        const tie = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.32, 0.02), new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.2 }));
+        tie.position.set(0, 0.44, 0.15);
+        pelvis.add(tie);
+      }
+
+      // Neck & Head
+      const headGroup = new THREE.Group();
+      headGroup.position.set(0, 0.76, 0);
+      pelvis.add(headGroup);
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.165, 16, 16), skinMat);
+      head.position.y = 0.14;
+      head.castShadow = true;
+      headGroup.add(head);
+
+      // Chef Tall Toque (Hat)
+      if (role === "CHEF") {
+        const toque = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.19, 0.16, 0.38, 16),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 })
+        );
+        toque.position.y = 0.36;
+        toque.castShadow = true;
+        headGroup.add(toque);
+      } else {
+        const hair = new THREE.Mesh(
+          new THREE.SphereGeometry(0.175, 12, 12),
+          new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.9 })
+        );
+        hair.position.set(0, 0.18, -0.02);
+        hair.scale.set(1, 0.85, 1);
+        headGroup.add(hair);
+      }
+
+      // Dual-Jointed Arm Builder
+      function makeArm(side) {
+        const shoulder = new THREE.Group();
+        shoulder.position.set(side * 0.29, 0.62, 0);
+        pelvis.add(shoulder);
+
+        const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.36, 10), clothMat);
+        upperArm.position.y = -0.18;
+        upperArm.castShadow = true;
+        shoulder.add(upperArm);
+
+        const elbow = new THREE.Group();
+        elbow.position.y = -0.36;
+        shoulder.add(elbow);
+
+        const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.048, 0.34, 10), skinMat);
+        forearm.position.y = -0.17;
+        forearm.castShadow = true;
+        elbow.add(forearm);
+
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.058, 8, 8), skinMat);
+        hand.position.y = -0.34;
+        elbow.add(hand);
+
+        return { shoulder, elbow, hand };
+      }
+
+      // Dual-Jointed Leg Builder
+      function makeLeg(side) {
+        const hip = new THREE.Group();
+        hip.position.set(side * 0.15, 0, 0);
+        pelvis.add(hip);
+
+        const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.44, 10), pantsMat);
+        thigh.position.y = -0.22;
+        thigh.castShadow = true;
+        hip.add(thigh);
+
+        const knee = new THREE.Group();
+        knee.position.y = -0.44;
+        hip.add(knee);
+
+        const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.44, 10), pantsMat);
+        shin.position.y = -0.22;
+        shin.castShadow = true;
+        knee.add(shin);
+
+        const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.22), new THREE.MeshStandardMaterial({ color: 0x090a0d }));
+        shoe.position.set(0, -0.44, 0.04);
+        shoe.castShadow = true;
+        knee.add(shoe);
+
+        return { hip, knee, shoe };
+      }
+
+      const leftArm = makeArm(-1);
+      const rightArm = makeArm(1);
+      const leftLeg = makeLeg(-1);
+      const rightLeg = makeLeg(1);
+
+      // Serving Cloche Tray (Waiters)
+      let servingTray = null;
+      if (role === "WAITER") {
+        servingTray = new THREE.Group();
+        const plate = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.38, 0.35, 0.03, 20),
+          new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.95, roughness: 0.1 })
+        );
+        servingTray.add(plate);
+
+        const dome = new THREE.Mesh(
+          new THREE.SphereGeometry(0.22, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+          new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.95, roughness: 0.05 })
+        );
+        dome.position.y = 0.02;
+        servingTray.add(dome);
+
+        servingTray.position.set(0.15, -0.22, 0.35);
+        servingTray.visible = false;
+        rightArm.elbow.add(servingTray);
+      }
+
+      scene.add(root);
+
+      return {
+        root,
+        pelvis,
+        headGroup,
+        leftArm,
+        rightArm,
+        leftLeg,
+        rightLeg,
+        servingTray,
+        role,
+        isSitting: false,
+        animClock: Math.random() * 20
+      };
+    }
+
+    /* =========================================================================
+       7. KINEMATIC ANIMATION SOLVER (GAIT, SITTING, TALKING, EATING, COOKING)
+    ========================================================================= */
+    function solveHumanPose(human, speed = 0, action = "IDLE") {
+      human.animClock += 0.055 * (speed > 0.02 ? 1.9 : 0.85);
+      const t = human.animClock;
+
+      if (human.isSitting) {
+        // Natural Sitting Kinematics (90-deg thigh bend, 90-deg knee fold)
+        human.pelvis.position.y = 0.58;
+        human.leftLeg.hip.rotation.x = -Math.PI / 2 + 0.08;
+        human.rightLeg.hip.rotation.x = -Math.PI / 2 + 0.08;
+        human.leftLeg.knee.rotation.x = Math.PI / 2 - 0.08;
+        human.rightLeg.knee.rotation.x = Math.PI / 2 - 0.08;
+
+        if (action === "EATING") {
+          // Fork to mouth cadence
+          human.rightArm.shoulder.rotation.x = -0.85 + Math.sin(t * 2.2) * 0.28;
+          human.rightArm.shoulder.rotation.z = -0.25;
+          human.rightArm.elbow.rotation.x = -1.25 + Math.sin(t * 2.2) * 0.35;
+          human.leftArm.shoulder.rotation.x = -0.55;
+          human.leftArm.elbow.rotation.x = -0.65;
+          human.headGroup.rotation.x = 0.18 + Math.sin(t * 2.2) * 0.06;
+        } else if (action === "TALKING") {
+          // Dynamic conversational gestures
+          human.rightArm.shoulder.rotation.x = -0.65 + Math.sin(t * 2.6) * 0.3;
+          human.rightArm.elbow.rotation.x = -0.75 + Math.cos(t * 2.6) * 0.35;
+          human.leftArm.shoulder.rotation.x = -0.45 + Math.cos(t * 1.8) * 0.15;
+          human.headGroup.rotation.y = Math.sin(t * 1.4) * 0.25;
+          human.headGroup.rotation.x = Math.cos(t * 2.0) * 0.1;
+        } else {
+          // Relaxed hands resting on the table surface
+          human.leftArm.shoulder.rotation.x = -0.62;
+          human.leftArm.elbow.rotation.x = -0.6;
+          human.rightArm.shoulder.rotation.x = -0.62;
+          human.rightArm.elbow.rotation.x = -0.6;
+          human.headGroup.rotation.y = Math.sin(t * 0.5) * 0.08;
+        }
+        return;
+      }
+
+      // Standing / Locomotion Mode
+      human.pelvis.position.y = 0.94 + Math.abs(Math.sin(t * 2.1)) * 0.04;
+
+      if (speed > 0.02) {
+        // Natural Leg Stride & Pelvic Tilt
+        const stride = Math.sin(t * 3.2);
+        human.leftLeg.hip.rotation.x = stride * 0.65;
+        human.rightLeg.hip.rotation.x = -stride * 0.65;
+        human.leftLeg.knee.rotation.x = Math.max(0, -stride * 0.72);
+        human.rightLeg.knee.rotation.x = Math.max(0, stride * 0.72);
+
+        if (human.role === "WAITER" && human.servingTray && human.servingTray.visible) {
+          // Waiter carrying heavy silver tray with both hands stable
+          human.rightArm.shoulder.rotation.x = -1.15;
+          human.rightArm.elbow.rotation.x = -0.85;
+          human.leftArm.shoulder.rotation.x = -0.95;
+          human.leftArm.elbow.rotation.x = -0.85;
+        } else {
+          // Reciprocal Arm Swings
+          human.leftArm.shoulder.rotation.x = -stride * 0.52;
+          human.rightArm.shoulder.rotation.x = stride * 0.52;
+          human.leftArm.elbow.rotation.x = -0.15;
+          human.rightArm.elbow.rotation.x = -0.15;
+        }
+        human.headGroup.rotation.y = Math.sin(t * 1.5) * 0.05;
+      } else {
+        // Idle Breathing Stance
+        human.leftLeg.hip.rotation.x = 0;
+        human.rightLeg.hip.rotation.x = 0;
+        human.leftLeg.knee.rotation.x = 0;
+        human.rightLeg.knee.rotation.x = 0;
+
+        if (human.role === "CHEF") {
+          // Chef sautéing over the pan
+          human.rightArm.shoulder.rotation.x = -0.85 + Math.sin(t * 3.4) * 0.22;
+          human.rightArm.elbow.rotation.x = -1.05;
+          human.leftArm.shoulder.rotation.x = -0.55;
+          human.leftArm.elbow.rotation.x = -0.7;
+          human.headGroup.rotation.x = 0.28; // Looking down at skillet
+        } else {
+          human.leftArm.shoulder.rotation.x = Math.sin(t) * 0.06;
+          human.rightArm.shoulder.rotation.x = -Math.sin(t) * 0.06;
+          human.leftArm.elbow.rotation.x = 0;
+          human.rightArm.elbow.rotation.x = 0;
+          human.headGroup.rotation.y = Math.sin(t * 0.5) * 0.12;
+        }
+      }
+    }
+
+    /* =========================================================================
+       8. AUTONOMOUS AGENT ROSTER & PATHFINDING WAYPOINTS
+    ========================================================================= */
+    const WAYPOINTS = {
+      ENTRANCE_DOOR: new THREE.Vector3(0, 0, 16.5),
+      HOST_DESK: new THREE.Vector3(0, 0, 12.0),
+      MAIN_AISLE_SOUTH: new THREE.Vector3(0, 0, 5.5),
+      MAIN_AISLE_NORTH: new THREE.Vector3(0, 0, -2.5),
+      KITCHEN_PASS_PICKUP: new THREE.Vector3(-11, 0, -2.0),
+      CHEF_STATION: new THREE.Vector3(-11, 0, -11.5),
+      BAR_SERVE_POINT: new THREE.Vector3(10.5, 0, -5.5),
+      WAITER_REST_A: new THREE.Vector3(2.5, 0, 0),
+      WAITER_REST_B: new THREE.Vector3(-2.5, 0, 0)
+    };
+
+    // Realistic Waypoint Navigator (Avoids Cutting Through Furniture)
+    function buildAislePath(start, goal) {
+      const path = [];
+      const current = start.clone();
+
+      // If moving from south to north, route through main central aisle
+      if (Math.abs(current.z - goal.z) > 3.0) {
+        path.push(new THREE.Vector3(current.x * 0.4, 0, current.z));
+        path.push(new THREE.Vector3(0, 0, (current.z + goal.z) / 2));
+        path.push(new THREE.Vector3(goal.x * 0.4, 0, goal.z));
+      }
+      path.push(goal.clone());
+      return path;
+    }
+
+    // 1. Executive Chef Marcus
+    const chefMarcus = {
+      id: "chef-1",
+      name: "Chef Marcus (Executive)",
+      model: createHumanModel({ role: "CHEF", uniformTone: 0xf5f7fb, skinTone: 0xd6a374 }),
+      pos: WAYPOINTS.CHEF_STATION.clone(),
+      action: "COOKING"
+    };
+    chefMarcus.model.root.position.copy(chefMarcus.pos);
+
+    // 2. Head Waiters
+    const servers = [
+      {
+        id: "waiter-1",
+        name: "Vikram (Head Server)",
+        model: createHumanModel({ role: "WAITER", uniformTone: 0x111318 }),
+        pos: WAYPOINTS.WAITER_REST_A.clone(),
+        path: [],
+        busy: false,
+        carryingDish: null,
+        deliveriesDone: 0
+      },
+      {
+        id: "waiter-2",
+        name: "Priya (Sommelier / Server)",
+        model: createHumanModel({ role: "WAITER", uniformTone: 0x141822, skinTone: 0xcaa07a }),
+        pos: WAYPOINTS.WAITER_REST_B.clone(),
+        path: [],
+        busy: false,
+        carryingDish: null,
+        deliveriesDone: 0
+      }
+    ];
+
+    servers.forEach(s => s.model.root.position.copy(s.pos));
+
+    let activeCustomers = [];
+    let kitchenOrderQueue = [];
+    let totalGrossRevenue = 0;
+    let selectedInspectorObject = tables[0];
+
+    /* =========================================================================
+       9. LIVE KITCHEN DISPLAY SYSTEM (KDS) & DISPATCH ENGINE
+    ========================================================================= */
+    function renderKDSDeck() {
+      const list = document.getElementById("kds-order-list");
+      const badge = document.getElementById("kds-count-badge");
+      badge.innerText = `${kitchenOrderQueue.length} Active`;
+
+      if (kitchenOrderQueue.length === 0) {
+        list.innerHTML = `<div class="text-[11px] text-neutral-500 text-center py-10 italic">No pending culinary orders. Kitchen stations ready...</div>`;
+        return;
+      }
+
+      list.innerHTML = kitchenOrderQueue.map(order => `
+        <div class="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-2">
+          <div class="flex items-center justify-between text-xs font-mono-code">
+            <span class="font-bold text-amber-300">#${order.ticketId} • ${order.tableName}</span>
+            <span class="text-[10px] px-2 py-0.5 rounded ${
+              order.status === 'READY' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+              order.status === 'PREPARING' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+              'bg-sky-500/20 text-sky-300'
+            }">${order.status}</span>
+          </div>
+          <div class="space-y-0.5 text-xs text-neutral-300">
+            ${order.items.map(i => `<div class="flex justify-between"><span>1× ${i.name}</span><span class="text-neutral-500">₹${i.price}</span></div>`).join('')}
+          </div>
+          <div class="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-300" style="width: ${order.prepProgress}%"></div>
+          </div>
+          <div class="flex justify-between text-[10px] text-neutral-500 font-mono-code">
+            <span>Chef Marcus</span>
+            <span>${order.prepProgress}%</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function pushTelemetryEvent(text) {
+      document.getElementById('latest-event-feed').innerText = text;
+    }
+
+    /* =========================================================================
+       10. RESTAURANT AUTONOMOUS CYCLE: SPAWN -> SEAT -> ORDER -> COOK -> SERVE -> BILL
+    ========================================================================= */
+    function spawnCustomerParty() {
+      const vacantTable = tables.find(t => t.state === "AVAILABLE");
+      if (!vacantTable) {
+        pushTelemetryEvent("Dining hall at full capacity! Walk-in added to waitlist.");
+        return;
+      }
+
+      vacantTable.state = "ARRIVING";
+      const partySize = Math.min(vacantTable.seats, Math.floor(Math.random() * 2) + 2);
+      const partyMembers = [];
+
+      for (let i = 0; i < partySize; i++) {
+        const chair = vacantTable.chairs[i];
+        const cust = {
+          id: `cust-${Date.now()}-${i}`,
+          name: `Guest ${i === 0 ? "(Lead)" : `#${i + 1}`}`,
+          model: createHumanModel({ role: "CUSTOMER" }),
+          pos: WAYPOINTS.ENTRANCE_DOOR.clone().add(new THREE.Vector3(i * 0.45, 0, i * 0.2)),
+          targetChairPos: chair.pos,
+          facingAngle: chair.facingAngle,
+          path: buildAislePath(WAYPOINTS.ENTRANCE_DOOR, chair.pos),
+          isLead: i === 0,
+          action: "IDLE",
+          table: vacantTable
+        };
+        cust.model.root.position.copy(cust.pos);
+        partyMembers.push(cust);
+        activeCustomers.push(cust);
+      }
+
+      vacantTable.guestParty = partyMembers;
+      pushTelemetryEvent(`Reception welcomed ${partySize} guests. Escorting to ${vacantTable.name}...`);
+      updateDashboardKPIs();
+      inspectTable(vacantTable);
+
+      // Guests reach table and sit down
+      setTimeout(() => {
+        if (vacantTable.state === "ARRIVING") {
+          vacantTable.state = "SEATED";
+          partyMembers.forEach(c => {
+            c.model.isSitting = true;
+            c.model.root.position.copy(c.targetChairPos);
+            c.model.root.rotation.y = c.facingAngle;
+            c.action = "TALKING";
+          });
+
+          pushTelemetryEvent(`${vacantTable.name} seated. Guests studying degustation menu.`);
+          updateDashboardKPIs();
+          inspectTable(vacantTable);
+
+          // Server approaches to take order after 3 seconds
+          setTimeout(() => dispatchServerToTable(vacantTable), 3000);
+        }
+      }, 4000);
+    }
+
+    function dispatchServerToTable(table) {
+      table.state = "ORDERING";
+      const server = servers.find(s => !s.busy) || servers[0];
+      server.busy = true;
+      table.assignedServer = server;
+
+      pushTelemetryEvent(`${server.name} attending ${table.name} to take orders.`);
+      server.path = buildAislePath(server.pos, table.serveSpot);
+
+      server.onPathComplete = () => {
+        server.model.root.lookAt(table.x, 1, table.z);
+        table.guestParty.forEach(g => g.action = "TALKING");
+
+        // Taking order note (2 seconds)
+        setTimeout(() => {
+          table.guestParty.forEach(g => g.action = "IDLE");
+          table.state = "ORDER_SENT";
+
+          // Generate Dish Ticket
+          const chosenA = GASTRONOMY_MENU[Math.floor(Math.random() * 3)];
+          const chosenB = GASTRONOMY_MENU[3 + Math.floor(Math.random() * 3)];
+          const orderItems = [chosenA, chosenB];
+
+          const ticket = {
+            ticketId: Math.floor(1000 + Math.random() * 9000),
+            tableId: table.id,
+            tableName: table.name,
+            items: orderItems,
+            status: "PREPARING",
+            prepProgress: 0,
+            assignedServer: server
+          };
+
+          table.currentOrder = ticket;
+          table.billRecord = {
+            items: orderItems,
+            subtotal: orderItems.reduce((acc, c) => acc + c.price, 0),
+            tax: Math.round(orderItems.reduce((acc, c) => acc + c.price, 0) * 0.05),
+            service: 250,
+            status: "PENDING"
+          };
+          table.billRecord.total = table.billRecord.subtotal + table.billRecord.tax + table.billRecord.service;
+
+          // Server walks ticket to Kitchen Pass
+          server.path = buildAislePath(server.pos, WAYPOINTS.KITCHEN_PASS_PICKUP);
+          server.onPathComplete = () => {
+            kitchenOrderQueue.push(ticket);
+            table.state = "PREPARING";
+            pushTelemetryEvent(`Order #${ticket.ticketId} queued in KDS. Chef Marcus cooking.`);
+            renderKDSDeck();
+            updateDashboardKPIs();
+            inspectTable(table);
+
+            // Server returns to station while food cooks
+            server.busy = false;
+            server.path = buildAislePath(server.pos, WAYPOINTS.WAITER_REST_A);
+
+            simulateKitchenCooking(table, ticket);
+          };
+        }, 2200);
+      };
+    }
+
+    function simulateKitchenCooking(table, ticket) {
+      const cookTimer = setInterval(() => {
+        ticket.prepProgress += 25;
+        renderKDSDeck();
+
+        if (ticket.prepProgress >= 100) {
+          clearInterval(cookTimer);
+          ticket.status = "READY";
+          table.state = "FOOD_READY";
+          pushTelemetryEvent(`🔔 Order #${ticket.ticketId} PLATED on pass counter! Server summoned.`);
+          renderKDSDeck();
+          inspectTable(table);
+
+          // Dispatch server to pick up and deliver food
+          deliverFoodToTable(table, ticket);
+        }
+      }, 1000);
+    }
+
+    function deliverFoodToTable(table, ticket) {
+      const server = servers.find(s => !s.busy) || servers[0];
+      server.busy = true;
+      server.path = buildAislePath(server.pos, WAYPOINTS.KITCHEN_PASS_PICKUP);
+
+      server.onPathComplete = () => {
+        // Collect food cloche tray
+        server.model.servingTray.visible = true;
+        server.carryingDish = ticket.items[0].name;
+        pushTelemetryEvent(`${server.name} picked up cloche tray. Delivering to ${table.name}...`);
+
+        server.path = buildAislePath(server.pos, table.serveSpot);
+        server.onPathComplete = () => {
+          // Food served on table surface
+          server.model.servingTray.visible = false;
+          server.carryingDish = null;
+          server.deliveriesDone++;
+
+          // Spawn porcelain plates on table
+          const plateMesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.32, 0.3, 0.04, 16),
+            new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1 })
+          );
+          plateMesh.position.set(0, 1.1, 0.4);
+          table.group.add(plateMesh);
+          table.platesOnTable.push(plateMesh);
+
+          table.state = "DINING";
+          table.guestParty.forEach(g => g.action = "EATING");
+          kitchenOrderQueue = kitchenOrderQueue.filter(q => q.ticketId !== ticket.ticketId);
+          renderKDSDeck();
+          pushTelemetryEvent(`✨ Courses served at ${table.name}. Guests enjoying dining.`);
+          inspectTable(table);
+          updateDashboardKPIs();
+
+          // Free server
+          server.busy = false;
+          server.path = buildAislePath(server.pos, WAYPOINTS.WAITER_REST_B);
+
+          // Guests eat for 6 seconds, then request the bill
+          setTimeout(() => processBillWorkflow(table), 6500);
+        };
+      };
+    }
+
+    function processBillWorkflow(table) {
+      table.state = "BILL_REQUESTED";
+      table.guestParty.forEach(g => g.action = "TALKING");
+      pushTelemetryEvent(`💳 ${table.name} requested final bill. Server presenting folio...`);
+      inspectTable(table);
+
+      const server = servers.find(s => !s.busy) || servers[0];
+      server.busy = true;
+      server.path = buildAislePath(server.pos, table.serveSpot);
+
+      server.onPathComplete = () => {
+        // Payment settlement
+        setTimeout(() => {
+          table.state = "PAYMENT";
+          table.billRecord.status = "PAID";
+          totalGrossRevenue += table.billRecord.total;
+          pushTelemetryEvent(`💰 Invoice settled: ₹${table.billRecord.total.toLocaleString()} received from ${table.name}.`);
+          updateDashboardKPIs();
+          inspectTable(table);
+
+          // Free server
+          server.busy = false;
+          server.path = buildAislePath(server.pos, WAYPOINTS.WAITER_REST_A);
+
+          // Guests leave table
+          setTimeout(() => departAndCleanTable(table), 2500);
+        }, 2000);
+      };
+    }
+
+    function departAndCleanTable(table) {
+      table.state = "CLEANING";
+      pushTelemetryEvent(`👋 Guests departing ${table.name}. Sanitize & table turnover commencing.`);
+      inspectTable(table);
+
+      // Remove plates
+      table.platesOnTable.forEach(p => table.group.remove(p));
+      table.platesOnTable = [];
+
+      // Guests walk out the entrance
+      table.guestParty.forEach(c => {
+        c.model.isSitting = false;
+        c.action = "IDLE";
+        c.path = buildAislePath(c.pos, WAYPOINTS.ENTRANCE_DOOR);
+        c.onPathComplete = () => {
+          scene.remove(c.model.root);
+          activeCustomers = activeCustomers.filter(item => item.id !== c.id);
+        };
+      });
+
+      // Table cleaning takes 3 seconds, then becomes available
+      setTimeout(() => {
+        table.state = "AVAILABLE";
+        table.guestParty = [];
+        table.currentOrder = null;
+        table.billRecord = null;
+        table.assignedServer = null;
+        pushTelemetryEvent(`🟢 ${table.name} is now spotless and AVAILABLE for bookings.`);
+        updateDashboardKPIs();
+        inspectTable(table);
+      }, 3500);
+    }
+
+    /* =========================================================================
+       11. REAL-TIME INSPECTOR VIEW & SEAT TELEMETRY
+    ========================================================================= */
+    function inspectTable(table) {
+      selectedInspectorObject = table;
+      const body = document.getElementById("inspector-body");
+      const badge = document.getElementById("inspect-status-badge");
+
+      badge.innerText = `${table.name}: ${table.state}`;
+
+      if (table.state === "AVAILABLE") {
+        body.innerHTML = `
+          <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-2">
+            <div class="text-emerald-400 text-base font-bold">🟢 Table Available</div>
+            <p class="text-[11px] text-neutral-400">Capacity: ${table.seats} Guests • Tier: ${table.tier}</p>
+            <button onclick="seatPartyAtSpecificTable(${table.id})" class="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider transition">
+              Seat Next Walk-in Here
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      body.innerHTML = `
+        <div class="space-y-3 font-mono-code text-xs">
+          <!-- Table Snapshot -->
+          <div class="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1.5 text-[11px]">
+            <div class="flex justify-between"><span class="text-neutral-400">Phase:</span><span class="text-amber-300 font-bold">${table.state}</span></div>
+            <div class="flex justify-between"><span class="text-neutral-400">Occupancy:</span><span class="text-white">${table.guestParty.length} / ${table.seats} Guests</span></div>
+            <div class="flex justify-between"><span class="text-neutral-400">Assigned Server:</span><span class="text-sky-300 font-bold">${table.assignedServer ? table.assignedServer.name.split(' ')[0] : 'Dispatched'}</span></div>
+          </div>
+
+          <!-- Active Bill Ledger -->
+          ${table.billRecord ? `
+            <div class="p-3.5 rounded-2xl bg-black/40 border border-amber-500/30 space-y-2.5">
+              <div class="flex justify-between items-center text-[11px] font-bold text-amber-300 uppercase">
+                <span>Folio Statement</span>
+                <span class="px-1.5 py-0.5 rounded ${table.billRecord.status === 'PAID' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}">${table.billRecord.status}</span>
+              </div>
+              <div class="space-y-1 text-neutral-300 text-[11px]">
+                ${table.billRecord.items.map(i => `<div class="flex justify-between"><span>1× ${i.name}</span><span>₹${i.price}</span></div>`).join('')}
+                <div class="flex justify-between text-neutral-500 text-[10px]"><span>GST (5%)</span><span>₹${table.billRecord.tax}</span></div>
+                <div class="flex justify-between text-neutral-500 text-[10px]"><span>Service Charge</span><span>₹${table.billRecord.service}</span></div>
+                <div class="border-t border-white/10 pt-1.5 flex justify-between font-bold text-white text-xs">
+                  <span>Net Amount:</span>
+                  <span class="text-emerald-400 font-bold">₹${table.billRecord.total.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          ` : `
+            <div class="p-3 rounded-2xl bg-white/[0.02] text-center text-neutral-500 text-xs italic">
+              Menu viewing in progress. Bill ledger generating...
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function seatPartyAtSpecificTable(tableId) {
+      const target = tables.find(t => t.id === tableId);
+      if (target && target.state === "AVAILABLE") {
+        spawnCustomerParty();
+      }
+    }
+
+    function updateDashboardKPIs() {
+      const occ = tables.filter(t => t.state !== "AVAILABLE").length;
+      document.getElementById("kpi-tables").innerText = `${occ}/${tables.length} Occ`;
+      document.getElementById("kpi-orders").innerText = `${tables.filter(t => t.currentOrder !== null).length} Active`;
+      document.getElementById("kpi-kitchen").innerText = `${kitchenOrderQueue.length} Queued`;
+      document.getElementById("kpi-revenue").innerText = `₹${totalGrossRevenue.toLocaleString()}`;
+    }
+
+    /* =========================================================================
+       12. MAIN 60 FPS SIMULATION TICK & CAMERA DIRECTOR LOOP
+    ========================================================================= */
+    const clock = new THREE.Clock();
+
+    function navigateAgentMovement(agent, delta) {
+      if (agent.path && agent.path.length > 0) {
+        const nextTarget = agent.path[0];
+        const dir = new THREE.Vector3().subVectors(nextTarget, agent.pos);
+        dir.y = 0;
+        const dist = dir.length();
+        const walkSpeed = 2.8 * delta;
+
+        if (dist > walkSpeed) {
+          dir.normalize();
+          agent.pos.add(dir.multiplyScalar(walkSpeed));
+          agent.model.root.position.copy(agent.pos);
+
+          const heading = Math.atan2(dir.x, dir.z);
+          agent.model.root.rotation.y = heading;
+
+          solveHumanPose(agent.model, walkSpeed, "IDLE");
+        } else {
+          agent.pos.copy(nextTarget);
+          agent.model.root.position.copy(agent.pos);
+          agent.path.shift();
+
+          if (agent.path.length === 0 && agent.onPathComplete) {
+            agent.onPathComplete();
+            agent.onPathComplete = null;
+          }
+        }
+      } else {
+        solveHumanPose(agent.model, 0, agent.action || "IDLE");
+      }
+    }
+
+    let followTargetId = "none";
+
+    function onFollowSelectChange(val) {
+      followTargetId = val;
+    }
+
+    function simulationEngineLoop() {
+      requestAnimationFrame(simulationEngineLoop);
+      const delta = Math.min(clock.getDelta(), 0.1);
+
+      // 1. Chef Marcus Pose Loop
+      solveHumanPose(chefMarcus.model, 0, "COOKING");
+
+      // 2. Waiter Navigation Loops
+      servers.forEach(s => navigateAgentMovement(s, delta));
+
+      // 3. Customer Navigation Loops
+      activeCustomers.forEach(c => navigateAgentMovement(c, delta));
+
+      // 4. Camera Follow Director
+      if (followTargetId === "waiter-1") {
+        controls.target.lerp(servers[0].pos, 0.08);
+      } else if (followTargetId === "waiter-2") {
+        controls.target.lerp(servers[1].pos, 0.08);
+      } else if (followTargetId === "chef-1") {
+        controls.target.lerp(chefMarcus.pos, 0.08);
+      } else if (followTargetId === "customer-active" && activeCustomers.length > 0) {
+        controls.target.lerp(activeCustomers[0].pos, 0.08);
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    requestAnimationFrame(simulationEngineLoop);
+
+    /* =========================================================================
+       13. INTERACTIVE CLICK-SELECTION (RAYCASTING)
+    ========================================================================= */
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    window.addEventListener("pointerdown", (e) => {
+      // Ignore if clicking HUD elements
+      if (e.target.closest("header, aside, footer, button, select")) return;
+
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+
+      // Check Tables
+      const hitTable = tables.find(t => {
+        const intersects = raycaster.intersectObjects(t.group.children, true);
+        return intersects.length > 0;
+      });
+
+      if (hitTable) {
+        inspectTable(hitTable);
+        controls.target.lerp(new THREE.Vector3(hitTable.x, 1, hitTable.z), 0.5);
+      }
+    });
+
+    /* =========================================================================
+       14. CAMERA PRESETS & VIEWPORTS
+    ========================================================================= */
+    function setCameraView(preset) {
+      document.querySelectorAll('[id^="cam-"]').forEach(btn => {
+        btn.className = "px-2.5 py-1 rounded-lg text-xs font-semibold text-neutral-400 hover:text-white transition";
+      });
+      document.getElementById(`cam-${preset}`).className = "px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-400 text-black transition";
+      followTargetId = "none";
+      document.getElementById("follow-select").value = "none";
+
+      if (preset === 'overview') {
+        camera.position.set(0, 20, 26);
+        controls.target.set(0, 1.2, 0);
+      } else if (preset === 'dining') {
+        camera.position.set(0, 4.2, 12);
+        controls.target.set(0, 1.2, 3);
+      } else if (preset === 'kitchen') {
+        camera.position.set(-6, 4.8, 2);
+        controls.target.set(-11, 1.5, -6);
+      } else if (preset === 'entrance') {
+        camera.position.set(0, 3.5, 20);
+        controls.target.set(0, 1.2, 13);
+      }
+    }
+
+    /* =========================================================================
+       15. AMBIENT RESTAURANT SOUNDSCAPE (WEB AUDIO SYNTHESIZER)
+    ========================================================================= */
+    let audioCtx = null;
+    let isAudioPlaying = false;
+    let masterGain = null;
+
+    function toggleAudioEngine() {
+      const icon = document.getElementById("audio-icon");
+      if (!isAudioPlaying) {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          masterGain = audioCtx.createGain();
+          masterGain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+          masterGain.connect(audioCtx.destination);
+
+          // Warm harmonic restaurant ambiance chord
+          [130.81, 164.81, 196.00, 246.94].forEach(freq => {
+            const osc = audioCtx.createOscillator();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = "lowpass";
+            filter.frequency.setValueAtTime(450, audioCtx.currentTime);
+            osc.connect(filter);
+            filter.connect(masterGain);
+            osc.start();
+          });
+        } else {
+          audioCtx.resume();
+        }
+        isAudioPlaying = true;
+        icon.className = "fa-solid fa-volume-high text-xs text-amber-300";
+      } else {
+        if (audioCtx) audioCtx.suspend();
+        isAudioPlaying = false;
+        icon.className = "fa-solid fa-volume-xmark text-xs";
+      }
+    }
+
+    function toggleMobileKDS() {
+      const drawer = document.getElementById("kds-drawer");
+      drawer.classList.toggle("-translate-x-full");
+    }
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Auto-launch initial walk-in parties to make the restaurant immediately alive
+    setTimeout(() => spawnCustomerParty(), 800);
+    setTimeout(() => spawnCustomerParty(), 4500);
+
+    // Continuous 24/7 guest arrival cadence
+    setInterval(() => {
+      if (tables.some(t => t.state === "AVAILABLE")) {
+        spawnCustomerParty();
+      }
+    }, 12000);
+  </script>
+</body>
+</html>
